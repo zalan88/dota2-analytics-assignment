@@ -171,6 +171,7 @@ if __name__ == "__main__":
     # Step 2: Fetch and store detailed match data
     print("Fetching match details...")
     detailed_matches = []
+    all_players = []  # Track all players across matches
     
     for match in matches[:MATCH_LIMIT]:
         match_details = get_match_details(match["match_id"])
@@ -178,6 +179,15 @@ if __name__ == "__main__":
         if not match_details:
             print(f"⚠️ Skipping match {match['match_id']} due to timeout or missing data.")
             continue
+
+        # Extract players from match details
+        if "players" in match_details:
+            # Store only non-anonymous players
+            match_players = [
+                player for player in match_details["players"]
+                if player.get("account_id") and player["account_id"] != 4294967295  # Filter out anonymous players
+            ]
+            all_players.extend(match_players)
 
         detailed_matches.append(match_details)
         time.sleep(random.uniform(3, 7))  # Rate limiting delay between match requests
@@ -188,6 +198,32 @@ if __name__ == "__main__":
         store_raw_data("stg_matches", detailed_matches)
     else:
         print("⚠️ No detailed matches to store!")
+
+    # Process and store player data
+    if all_players:
+        print(f"Processing {len(all_players)} players from matches...")
+        # Get unique players by account_id
+        unique_players = {}
+        for player in all_players:
+            account_id = str(player["account_id"])
+            if account_id not in unique_players:
+                # Create player profile structure
+                unique_players[account_id] = {
+                    "profile": {
+                        "account_id": player["account_id"],
+                        "personaname": player.get("personaname", "Unknown"),
+                        "name": player.get("name", player.get("personaname", "Unknown")),
+                    }
+                }
+        
+        player_list = list(unique_players.values())
+        if player_list:
+            print(f"Storing {len(player_list)} unique players...")
+            store_unique_players(player_list)
+        else:
+            print("⚠️ No valid players to store!")
+    else:
+        print("⚠️ No players found in matches!")
 
     # Step 3: Extract and store team data from matches
     print("Fetching team info from match history...")

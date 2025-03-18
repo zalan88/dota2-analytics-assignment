@@ -26,6 +26,8 @@ CREATE TABLE IF NOT EXISTS fact_matches (
     start_time BIGINT,
     duration INT,
     game_mode INT,
+    radiant_team_id INT,      
+    dire_team_id INT,       
     first_blood_time INT,
     team_fights INT,
     radiant_win BOOLEAN,

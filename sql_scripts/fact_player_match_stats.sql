@@ -40,7 +40,7 @@ SELECT
     ((player->>'items')::JSONB->>2)::INT AS item_2,
     ((player->>'items')::JSONB->>3)::INT AS item_3,
     ((player->>'items')::JSONB->>4)::INT AS item_4,
-    ((player->>'items')::JSONB->>5)::INT AS item_5
+    (dim(player->>'items')::JSONB->>5)::INT AS item_5
 FROM stg_matches,
 LATERAL jsonb_array_elements(raw_json->'players_info') AS player
 WHERE (player->>'account_id') IS NOT NULL
