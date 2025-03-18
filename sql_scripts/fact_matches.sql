@@ -1,3 +1,11 @@
+-- Temporarily disable foreign key constraints
+ALTER TABLE fact_team_match_stats DROP CONSTRAINT IF EXISTS fact_team_match_stats_match_id_fkey;
+ALTER TABLE fact_player_match_stats DROP CONSTRAINT IF EXISTS fact_player_match_stats_match_id_fkey;
+
+-- Clear existing data
+TRUNCATE TABLE fact_matches;
+
+-- Insert match data
 INSERT INTO fact_matches (
     match_id, 
     start_time, 
@@ -24,4 +32,27 @@ SELECT DISTINCT ON ((raw_json->>'match_id')::BIGINT)
     (raw_json->>'version')::INT AS version,
     (raw_json->>'patch')::INT AS patch
 FROM stg_matches
-WHERE (raw_json->>'match_id') IS NOT NULL;
+WHERE (raw_json->>'match_id') IS NOT NULL
+ON CONFLICT (match_id) DO UPDATE SET
+    start_time = EXCLUDED.start_time,
+    duration = EXCLUDED.duration,
+    game_mode = EXCLUDED.game_mode,
+    radiant_team_id = EXCLUDED.radiant_team_id,
+    dire_team_id = EXCLUDED.dire_team_id,
+    first_blood_time = EXCLUDED.first_blood_time,
+    team_fights = EXCLUDED.team_fights,
+    radiant_win = EXCLUDED.radiant_win,
+    version = EXCLUDED.version,
+    patch = EXCLUDED.patch;
+
+-- Restore foreign key constraints
+ALTER TABLE fact_team_match_stats 
+ADD CONSTRAINT fact_team_match_stats_match_id_fkey 
+FOREIGN KEY (match_id) REFERENCES fact_matches(match_id) ON DELETE CASCADE;
+
+ALTER TABLE fact_player_match_stats 
+ADD CONSTRAINT fact_player_match_stats_match_id_fkey 
+FOREIGN KEY (match_id) REFERENCES fact_matches(match_id) ON DELETE CASCADE;
+
+-- Verify the data
+SELECT COUNT(*) AS total_matches FROM fact_matches;

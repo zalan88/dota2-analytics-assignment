@@ -27,18 +27,18 @@ SELECT
     (player->>'hero_id')::INT AS hero_id,
     CASE 
         WHEN (player->>'deaths')::INT = 0 THEN ((player->>'kills')::INT + (player->>'assists')::INT)::FLOAT
-        ELSE ROUND(((player->>'kills')::INT + (player->>'assists')::INT)::FLOAT / NULLIF((player->>'deaths')::INT, 0), 2)
+        ELSE (((player->>'kills')::INT + (player->>'assists')::INT)::FLOAT / NULLIF((player->>'deaths')::INT, 0))::NUMERIC(10,2)
     END AS kda,
     (player->>'kills')::INT AS kills,
     (player->>'deaths')::INT AS deaths,
     (player->>'assists')::INT AS assists,
     (player->>'total_gold')::INT AS total_gold,
     (player->>'total_xp')::INT AS total_xp,
-    COALESCE((player->>'objectives_taken')::INT, 0) AS objectives,
+    COALESCE((player->>'tower_kills')::INT, 0) + COALESCE((player->>'ancient_kills')::INT, 0) + COALESCE((player->>'roshan_kills')::INT, 0) AS objectives,
     COALESCE((player->>'tower_kills')::INT, 0) AS tower_kills,
     COALESCE((player->>'ancient_kills')::INT, 0) AS ancient_kills,
     (player->>'kills')::INT AS hero_kills,
-    (player->>'actions_per_min')::INT AS actions_per_minute,
+    COALESCE((player->>'actions_per_min')::INT, 0) AS actions_per_minute,
     COALESCE((player->>'item_0')::INT, 0) AS item_0,
     COALESCE((player->>'item_1')::INT, 0) AS item_1,
     COALESCE((player->>'item_2')::INT, 0) AS item_2,
