@@ -70,8 +70,17 @@ def store_raw_data(table_name, data):
     """
     if not data:
         return
-    query = f"INSERT INTO {table_name} (raw_json) VALUES %s;"
-    execute_values(cursor, query, [(json.dumps(entry),) for entry in data])
+        
+    if table_name == "stg_matches":
+        # Special handling for matches to ensure match_id is set
+        query = f"INSERT INTO {table_name} (match_id, raw_json) VALUES %s;"
+        values = [(entry.get("match_id"), json.dumps(entry)) for entry in data]
+    else:
+        # Default handling for other tables
+        query = f"INSERT INTO {table_name} (raw_json) VALUES %s;"
+        values = [(json.dumps(entry),) for entry in data]
+    
+    execute_values(cursor, query, values)
     conn.commit()
 
 def store_unique_teams(teams):
@@ -154,41 +163,15 @@ def get_player_info(player_id):
 if __name__ == "__main__":
     team_id = 2163  # Team ID to analyze
 
-    # Step 1: Fetch and store hero data
-    print("Fetching heroes...")
-    cursor.execute("DELETE FROM stg_heroes;")  # Clear existing hero data
-    heroes = get_heroes()
-    print(f"✅ Retrieved {len(heroes) if heroes else 0} heroes.")
-    store_raw_data("stg_heroes", heroes)
-
-    # Step 2: Fetch basic match data (but don't store it)
+    # Step 1: Fetch basic match data
     print("Fetching matches...")
     matches = get_team_matches(team_id)
     print(f"✅ Retrieved {len(matches)} matches (Expected: {MATCH_LIMIT})")
 
-    # Step 3: Fetch and store team data from matches
-    print("Fetching team info from match history...")
-    team_data = []
-    for match in matches:
-        radiant_team_id = match.get("radiant_team_id")
-        dire_team_id = match.get("dire_team_id")
-
-        # Get both teams' details from each match
-        if radiant_team_id:
-            radiant_team = get_team_info(radiant_team_id)
-            if radiant_team:
-                team_data.append(radiant_team)
-
-        if dire_team_id:
-            dire_team = get_team_info(dire_team_id)
-            if dire_team:
-                team_data.append(dire_team)
-
-    store_unique_teams(team_data)
-
-    # Step 4: Fetch and store detailed match data
-    print("Fetching match details")
+    # Step 2: Fetch and store detailed match data
+    print("Fetching match details...")
     detailed_matches = []
+    
     for match in matches[:MATCH_LIMIT]:
         match_details = get_match_details(match["match_id"])
         
@@ -196,20 +179,44 @@ if __name__ == "__main__":
             print(f"⚠️ Skipping match {match['match_id']} due to timeout or missing data.")
             continue
 
-        # Ensure all required fields are present in the match details
-        match_details["radiant_team_id"] = match_details.get("radiant_team_id")
-        match_details["dire_team_id"] = match_details.get("dire_team_id")
-        match_details["players_info"] = match_details.get("players", [])
-
         detailed_matches.append(match_details)
         time.sleep(random.uniform(3, 7))  # Rate limiting delay between match requests
 
-    # Store only the detailed match data
+    # Store the detailed match data
     if detailed_matches:
         print(f"Storing {len(detailed_matches)} detailed matches...")
         store_raw_data("stg_matches", detailed_matches)
     else:
         print("⚠️ No detailed matches to store!")
+
+    # Step 3: Extract and store team data from matches
+    print("Fetching team info from match history...")
+    team_data = []
+    fetched_team_ids = set()
+
+    for match in detailed_matches:
+        for team_id in [match.get("radiant_team_id"), match.get("dire_team_id")]:
+            if team_id and str(team_id) not in fetched_team_ids:
+                team_info = get_team_info(team_id)
+                if team_info:
+                    team_data.append(team_info)
+                    fetched_team_ids.add(str(team_id))
+
+    if team_data:
+        print(f"Found {len(team_data)} unique teams...")
+        store_unique_teams(team_data)
+    else:
+        print("⚠️ No team data to store!")
+
+    # Step 4: Fetch and store hero reference data
+    print("Fetching heroes...")
+    cursor.execute("DELETE FROM stg_heroes;")  # Clear existing hero data
+    heroes = get_heroes()
+    if heroes:
+        print(f"✅ Retrieved {len(heroes)} heroes.")
+        store_raw_data("stg_heroes", heroes)
+    else:
+        print("⚠️ No hero data retrieved!")
 
     # Cleanup and summary
     print(f"🔄 Total API Calls Made: {api_calls}")
