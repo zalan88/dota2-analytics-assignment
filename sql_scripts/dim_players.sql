@@ -18,4 +18,12 @@ SELECT DISTINCT ON ((raw_json->'profile'->>'account_id')::INT)
     TO_TIMESTAMP((raw_json->'profile'->>'last_match_time')::BIGINT) AS last_match_time,
     raw_json->'profile'->>'profileurl' AS profileurl
 FROM stg_players
-WHERE (raw_json->'profile'->>'account_id') IS NOT NULL;
+WHERE (raw_json->'profile'->>'account_id') IS NOT NULL
+ON CONFLICT (account_id) DO UPDATE SET
+    player_name = EXCLUDED.player_name,
+    is_pro = EXCLUDED.is_pro,
+    last_login = EXCLUDED.last_login,
+    full_history_time = EXCLUDED.full_history_time,
+    country_code = EXCLUDED.country_code,
+    last_match_time = EXCLUDED.last_match_time,
+    profileurl = EXCLUDED.profileurl;
