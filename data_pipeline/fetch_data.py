@@ -107,9 +107,21 @@ def store_raw_data(table_name, data):
         return
         
     if table_name == "stg_matches":
+        # Get existing match IDs from staging table
+        cursor.execute("SELECT match_id FROM stg_matches;")
+        existing_stg_matches = {row[0] for row in cursor.fetchall()}
+        
+        # Filter out matches that already exist in staging
+        new_data = [entry for entry in data if entry.get("match_id") not in existing_stg_matches]
+        
+        if not new_data:
+            print("⚠️ All matches already exist in staging table, skipping insert.")
+            return
+            
         # Special handling for matches to ensure match_id is set
         query = f"INSERT INTO {table_name} (match_id, raw_json) VALUES %s;"
-        values = [(entry.get("match_id"), json.dumps(entry)) for entry in data]
+        values = [(entry.get("match_id"), json.dumps(entry)) for entry in new_data]
+        print(f"Inserting {len(new_data)} new matches (skipped {len(data) - len(new_data)} existing matches)")
     else:
         # Default handling for other tables
         query = f"INSERT INTO {table_name} (raw_json) VALUES %s;"

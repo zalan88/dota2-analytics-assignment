@@ -15,7 +15,10 @@ LEFT JOIN (
         raw_json->>'name' as name
     FROM stg_teams
 ) st ON st.team_id = teams.id
-WHERE teams.id IS NOT NULL;
+WHERE teams.id IS NOT NULL
+ON CONFLICT (team_id) DO UPDATE SET
+    team_name = EXCLUDED.team_name,
+    region = EXCLUDED.region;
 
 -- Then, insert team match statistics for radiant teams
 INSERT INTO fact_team_match_stats (match_id, team_id, total_kills, total_deaths, total_assists, 
