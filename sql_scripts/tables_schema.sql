@@ -1,5 +1,4 @@
--- 🏗 Staging Tables (Raw API Data Storage)
---DROP TABLE IF EXISTS stg_matches;
+-- 1. First create staging tables (no dependencies)
 CREATE TABLE stg_matches (
     match_id BIGINT PRIMARY KEY,
     raw_json JSONB,           
@@ -8,20 +7,47 @@ CREATE TABLE stg_matches (
     players_info JSONB        
 );
 
-CREATE TABLE IF NOT EXISTS stg_players (
+CREATE TABLE stg_players (
     raw_json JSONB
 );
 
-CREATE TABLE IF NOT EXISTS stg_teams (
+CREATE TABLE stg_teams (
     raw_json JSONB
 );
 
-CREATE TABLE IF NOT EXISTS stg_heroes (
+CREATE TABLE stg_heroes (
     raw_json JSONB
 );
 
--- 📊 Fact Tables (Processed Match Data)
-CREATE TABLE IF NOT EXISTS fact_matches (
+-- 2. Then create dimension tables (no dependencies)
+CREATE TABLE dim_players (
+    account_id INT PRIMARY KEY,
+    player_name TEXT,
+    is_pro BOOLEAN
+);
+
+CREATE TABLE dim_heroes (
+    hero_id INT PRIMARY KEY,
+    hero_name TEXT,
+    hero_main_role TEXT
+);
+
+CREATE TABLE dim_teams (
+    team_id INT PRIMARY KEY,
+    team_name TEXT,
+    region TEXT,
+    total_matches INT,
+    win_count INT,
+    loss_count INT,
+    avg_match_gold INT,
+    avg_match_xp INT,
+    avg_match_kills INT,
+    avg_match_deaths INT,
+    avg_match_kda FLOAT
+);
+
+-- 3. Then create fact_matches (no dependencies)
+CREATE TABLE fact_matches (
     match_id BIGINT PRIMARY KEY,
     start_time BIGINT,
     duration INT,
@@ -35,7 +61,8 @@ CREATE TABLE IF NOT EXISTS fact_matches (
     patch INT
 );
 
-CREATE TABLE IF NOT EXISTS fact_team_match_stats (
+-- 4. Then create fact tables with foreign keys
+CREATE TABLE fact_team_match_stats (
     match_id BIGINT,
     team_id INT,
     total_kills INT,
@@ -52,7 +79,7 @@ CREATE TABLE IF NOT EXISTS fact_team_match_stats (
     FOREIGN KEY (team_id) REFERENCES dim_teams(team_id) ON DELETE CASCADE
 );
 
-CREATE TABLE IF NOT EXISTS fact_player_match_stats (
+CREATE TABLE fact_player_match_stats (
     match_id BIGINT,
     account_id INT,
     hero_id INT,
@@ -79,34 +106,7 @@ CREATE TABLE IF NOT EXISTS fact_player_match_stats (
     FOREIGN KEY (hero_id) REFERENCES dim_heroes(hero_id) ON DELETE SET NULL
 );
 
--- 🗂 Dimension Tables (Reference Data)
-CREATE TABLE IF NOT EXISTS dim_players (
-    account_id INT PRIMARY KEY,
-    player_name TEXT,
-    is_pro BOOLEAN
-);
-
-CREATE TABLE IF NOT EXISTS dim_heroes (
-    hero_id INT PRIMARY KEY,
-    hero_name TEXT,
-    hero_main_role TEXT
-);
-
-CREATE TABLE IF NOT EXISTS dim_teams (
-    team_id INT PRIMARY KEY,
-    team_name TEXT,
-    region TEXT,
-    total_matches INT,
-    win_count INT,
-    loss_count INT,
-    avg_match_gold INT,
-    avg_match_xp INT,
-    avg_match_kills INT,
-    avg_match_deaths INT,
-    avg_match_kda FLOAT
-);
-
--- 🔍 Indexes for Performance
+-- 5. Finally create indexes
 CREATE INDEX idx_team_match_team_id ON fact_team_match_stats(team_id);
 CREATE INDEX idx_player_match_account_id ON fact_player_match_stats(account_id);
 CREATE INDEX idx_player_match_hero_id ON fact_player_match_stats(hero_id);
