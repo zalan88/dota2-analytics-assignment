@@ -60,6 +60,12 @@ dota2-analytics-assignment/
    ```
    Wait for it to complete. The ETL container will exit when done.
 
+4. Incremental Load:
+   ```bash
+   docker-compose run --rm etl
+   ```
+   Run this code to re-run the ETL and fetch new matches from the team.
+
 ## First Time Setup Issues
 
 If you encounter any database authentication issues during first setup:
@@ -98,7 +104,12 @@ You can interact with the database in several ways:
    SELECT COUNT(*) FROM fact_matches;
    ```
 
-3. Running analytical queries:
+3. Running the Analytical Questions Scripts:
+   ```bash
+   # Run a specific file
+   docker-compose exec db psql -U postgres -d dota2_analytics -f /app/analytical_questions_scripts/top3_player_kda.sql
+   ```
+4. Running analytical queries:
    ```bash
    # View top players by KDA
    docker-compose exec db psql -U postgres -d dota2_analytics -c "
@@ -112,12 +123,6 @@ You can interact with the database in several ways:
    HAVING COUNT(*) > 5
    ORDER BY avg_kda DESC
    LIMIT 10;"
-   ```
-
-4. Using the provided analysis scripts:
-   ```bash
-   # Run a specific analysis
-   docker-compose exec db psql -U postgres -d dota2_analytics -f /app/analytical_questions_scripts/top3_player_kda.sql
    ```
 
 ## Configuration (Optional)
