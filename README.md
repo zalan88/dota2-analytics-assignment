@@ -60,21 +60,19 @@ dota2-analytics-assignment/
    ```
    Wait for it to complete. The ETL container will exit when done.
 
-4. Query the data (in a new terminal):
+## First Time Setup Issues
+
+If you encounter any database authentication issues during first setup:
+
+1. Make sure you've properly set up your `.env` file from `.env.example`
+2. If issues persist, try cleaning up Docker state:
    ```bash
-   docker-compose exec db psql -U postgres -d dota2_analytics
+   # Stop containers and remove volumes
+   docker-compose down -v
+   
+   # Start fresh
+   docker-compose up
    ```
-
-That's it! You can now analyze Dota 2 match data.
-
-Note: To rerun the ETL pipeline:
-```bash
-docker-compose up etl
-```
-
-## Common Database Commands
-
-Note: The pipeline automatically detects if this is the first run by checking the database state. On first run, it will perform a full initial load. Subsequent runs will be incremental updates. Users can force a full reload at any time by running `docker-compose down -v` to remove the volumes and start fresh.
 
 ## Accessing the Database
 
