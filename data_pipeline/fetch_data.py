@@ -4,6 +4,7 @@ import os
 import json
 import time
 import random
+import sys
 
 # Third party imports
 from dotenv import load_dotenv
@@ -21,7 +22,9 @@ conn = psycopg2.connect(DATABASE_URL)
 cursor = conn.cursor()
 
 # Configuration constants
-MATCH_LIMIT = 3  # Number of matches to fetch per team (reduced for testing)
+INITIAL_LOAD = os.getenv("INITIAL_LOAD", "false").lower() == "true"
+MATCH_LIMIT = 50 if INITIAL_LOAD else 3  # Process more matches on initial load
+MATCH_HISTORY_DEPTH = 100  # How far back to look in match history
 RETRY_ATTEMPTS = 3  # Number of retry attempts for failed API calls
 BACKOFF_FACTOR = 2  # Exponential backoff multiplier between retries
 api_calls = 0  # Counter to track total API calls made
@@ -137,8 +140,14 @@ def get_team_matches(team_id):
         print("⚠️ API returned no matches, setting to empty list.")
         return []
     
-    matches = matches[:MATCH_LIMIT]
-    print(f"🛠 API returned {len(matches)} matches (Expected: {MATCH_LIMIT})")
+    matches = matches[:MATCH_HISTORY_DEPTH]  # Look deeper into history
+    print(f"🛠 API returned {len(matches)} matches (Looking at last {MATCH_HISTORY_DEPTH} matches)")
+    
+    # Debug: Print first few matches timestamps
+    for match in matches[:5]:
+        print(f"Debug: Match {match['match_id']} timestamp: {match['start_time']} "
+              f"({time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(match['start_time']))})")
+    
     return matches
 
 def get_match_details(match_id):
@@ -159,21 +168,93 @@ def get_player_info(player_id):
     time.sleep(random.uniform(1, 3))  # Rate limiting delay
     return request_with_retries(f"{API_BASE_URL}/players/{player_id}")
 
+def get_latest_match_time():
+    """Get the most recent match time from fact_matches"""
+    try:
+        cursor.execute("SELECT MAX(start_time) FROM fact_matches;")
+        result = cursor.fetchone()[0]
+        return result if result else 0
+    except Exception as e:
+        print(f"Error getting latest match time: {e}")
+        return 0
+
+def get_existing_match_ids():
+    """Get set of existing match IDs from fact_matches"""
+    try:
+        cursor.execute("SELECT match_id FROM fact_matches;")
+        return {row[0] for row in cursor.fetchall()}
+    except Exception as e:
+        print(f"Error getting existing match IDs: {e}")
+        return set()
+
+def get_existing_team_ids():
+    """Get set of existing team IDs from dim_teams"""
+    try:
+        cursor.execute("SELECT team_id FROM dim_teams;")
+        return {row[0] for row in cursor.fetchall()}
+    except Exception as e:
+        print(f"Error getting existing team IDs: {e}")
+        return set()
+
+def get_existing_player_ids():
+    """Get set of existing player IDs from dim_players"""
+    try:
+        cursor.execute("SELECT account_id FROM dim_players;")
+        return {row[0] for row in cursor.fetchall()}
+    except Exception as e:
+        print(f"Error getting existing player IDs: {e}")
+        return set()
+
 # Main execution block
 if __name__ == "__main__":
     team_id = 2163  # Team ID to analyze
+    
+    print(f"Running in {'INITIAL LOAD' if INITIAL_LOAD else 'INCREMENTAL'} mode")
+    print(f"Will process up to {MATCH_LIMIT} new matches per run")
+    
+    # Get existing data to avoid duplicates
+    existing_match_ids = get_existing_match_ids()
+    existing_team_ids = get_existing_team_ids()
+    existing_player_ids = get_existing_player_ids()
+    latest_match_time = get_latest_match_time()
+    
+    print(f"Latest match time in DB: {latest_match_time} "
+          f"({time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(latest_match_time))})")
+    print(f"Existing matches in DB: {len(existing_match_ids)}")
 
     # Step 1: Fetch basic match data
     print("Fetching matches...")
     matches = get_team_matches(team_id)
-    print(f"✅ Retrieved {len(matches)} matches (Expected: {MATCH_LIMIT})")
+    
+    # Filter out matches we already have
+    new_matches = []
+    for m in matches:
+        match_id = int(m["match_id"])
+        match_time = int(m["start_time"])
+        is_new = match_id not in existing_match_ids and match_time > latest_match_time
+        
+        if is_new:
+            new_matches.append(m)
+        else:
+            print(f"Skipping match {match_id}: "
+                  f"{'Already exists' if match_id in existing_match_ids else 'Too old'} "
+                  f"(timestamp: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(match_time))})")
+    
+    # Apply the processing limit to new matches
+    new_matches = new_matches[:MATCH_LIMIT]
+    
+    print(f"✅ Found {len(new_matches)} new matches to process out of {len(matches)} matches checked")
+
+    if not new_matches:
+        print("No new matches to process, exiting...")
+        sys.exit(0)
 
     # Step 2: Fetch and store detailed match data
     print("Fetching match details...")
     detailed_matches = []
-    all_players = []  # Track all players across matches
+    all_players = []
     
-    for match in matches[:MATCH_LIMIT]:
+    for match in new_matches:  # No need for slice here as we already limited new_matches
         match_details = get_match_details(match["match_id"])
         
         if not match_details:
@@ -182,32 +263,31 @@ if __name__ == "__main__":
 
         # Extract players from match details
         if "players" in match_details:
-            # Store only non-anonymous players
             match_players = [
                 player for player in match_details["players"]
-                if player.get("account_id") and player["account_id"] != 4294967295  # Filter out anonymous players
+                if player.get("account_id") and 
+                   player["account_id"] != 4294967295 and  # Filter out anonymous players
+                   player["account_id"] not in existing_player_ids  # Filter out existing players
             ]
             all_players.extend(match_players)
 
         detailed_matches.append(match_details)
-        time.sleep(random.uniform(3, 7))  # Rate limiting delay between match requests
+        time.sleep(random.uniform(3, 7))
 
     # Store the detailed match data
     if detailed_matches:
-        print(f"Storing {len(detailed_matches)} detailed matches...")
+        print(f"Storing {len(detailed_matches)} new detailed matches...")
         store_raw_data("stg_matches", detailed_matches)
     else:
-        print("⚠️ No detailed matches to store!")
+        print("⚠️ No new detailed matches to store!")
 
     # Process and store player data
     if all_players:
-        print(f"Processing {len(all_players)} players from matches...")
-        # Get unique players by account_id
+        print(f"Processing {len(all_players)} new players from matches...")
         unique_players = {}
         for player in all_players:
             account_id = str(player["account_id"])
-            if account_id not in unique_players:
-                # Create player profile structure
+            if account_id not in unique_players and int(account_id) not in existing_player_ids:
                 unique_players[account_id] = {
                     "profile": {
                         "account_id": player["account_id"],
@@ -218,12 +298,12 @@ if __name__ == "__main__":
         
         player_list = list(unique_players.values())
         if player_list:
-            print(f"Storing {len(player_list)} unique players...")
+            print(f"Storing {len(player_list)} new unique players...")
             store_unique_players(player_list)
         else:
-            print("⚠️ No valid players to store!")
+            print("⚠️ No new players to store!")
     else:
-        print("⚠️ No players found in matches!")
+        print("⚠️ No new players found in matches!")
 
     # Step 3: Extract and store team data from matches
     print("Fetching team info from match history...")
@@ -232,27 +312,35 @@ if __name__ == "__main__":
 
     for match in detailed_matches:
         for team_id in [match.get("radiant_team_id"), match.get("dire_team_id")]:
-            if team_id and str(team_id) not in fetched_team_ids:
+            if (team_id and 
+                str(team_id) not in fetched_team_ids and 
+                team_id not in existing_team_ids):
                 team_info = get_team_info(team_id)
                 if team_info:
                     team_data.append(team_info)
                     fetched_team_ids.add(str(team_id))
 
     if team_data:
-        print(f"Found {len(team_data)} unique teams...")
+        print(f"Found {len(team_data)} new unique teams...")
         store_unique_teams(team_data)
     else:
-        print("⚠️ No team data to store!")
+        print("⚠️ No new team data to store!")
 
-    # Step 4: Fetch and store hero reference data
-    print("Fetching heroes...")
-    cursor.execute("DELETE FROM stg_heroes;")  # Clear existing hero data
-    heroes = get_heroes()
-    if heroes:
-        print(f"✅ Retrieved {len(heroes)} heroes.")
-        store_raw_data("stg_heroes", heroes)
+    # Step 4: Update hero reference data only if needed
+    print("Checking for hero updates...")
+    cursor.execute("SELECT COUNT(*) FROM stg_heroes;")
+    hero_count = cursor.fetchone()[0]
+    
+    if hero_count == 0:
+        print("Fetching heroes...")
+        heroes = get_heroes()
+        if heroes:
+            print(f"✅ Retrieved {len(heroes)} heroes.")
+            store_raw_data("stg_heroes", heroes)
+        else:
+            print("⚠️ No hero data retrieved!")
     else:
-        print("⚠️ No hero data retrieved!")
+        print(f"✅ Hero data already exists ({hero_count} heroes)")
 
     # Cleanup and summary
     print(f"🔄 Total API Calls Made: {api_calls}")

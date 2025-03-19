@@ -137,14 +137,39 @@ class ETL:
             
             # Pass environment variables to the child process
             env = os.environ.copy()
+            env['PYTHONUNBUFFERED'] = '1'  # Force unbuffered output
             
-            result = subprocess.run([
-                "python3",
+            # Run the script and stream output in real-time
+            process = subprocess.Popen([
+                "python3", "-u",  # -u flag forces unbuffered output
                 script_name
-            ], env=env, capture_output=True, text=True)
+            ], env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, 
+               text=True, bufsize=1, universal_newlines=True)
             
-            if result.returncode != 0:
-                logging.error(f"Error in {script_name}: {result.stderr}")
+            # Print output in real-time
+            while True:
+                output = process.stdout.readline()
+                if output:
+                    print(output.strip(), flush=True)
+                
+                error = process.stderr.readline()
+                if error:
+                    print(error.strip(), file=sys.stderr, flush=True)
+                
+                # Check if process has finished
+                if process.poll() is not None:
+                    # Get any remaining output
+                    remaining_output, remaining_error = process.communicate()
+                    if remaining_output:
+                        print(remaining_output.strip(), flush=True)
+                    if remaining_error:
+                        print(remaining_error.strip(), file=sys.stderr, flush=True)
+                    break
+            
+            # Get the return code
+            return_code = process.wait()
+            
+            if return_code != 0:
                 raise Exception(f"Python script {script_name} failed")
             
             duration = time.time() - start_time

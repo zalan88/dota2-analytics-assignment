@@ -5,7 +5,7 @@ ALTER TABLE fact_player_match_stats DROP CONSTRAINT IF EXISTS fact_player_match_
 -- Clear existing data
 TRUNCATE TABLE fact_matches;
 
--- Insert match data
+-- Insert only new match data
 INSERT INTO fact_matches (
     match_id, 
     start_time, 
@@ -33,6 +33,11 @@ SELECT DISTINCT ON ((raw_json->>'match_id')::BIGINT)
     (raw_json->>'patch')::INT AS patch
 FROM stg_matches
 WHERE (raw_json->>'match_id') IS NOT NULL
+AND NOT EXISTS (
+    SELECT 1 
+    FROM fact_matches fm 
+    WHERE fm.match_id = (raw_json->>'match_id')::BIGINT
+)
 ON CONFLICT (match_id) DO UPDATE SET
     start_time = EXCLUDED.start_time,
     duration = EXCLUDED.duration,
@@ -54,5 +59,11 @@ ALTER TABLE fact_player_match_stats
 ADD CONSTRAINT fact_player_match_stats_match_id_fkey 
 FOREIGN KEY (match_id) REFERENCES fact_matches(match_id) ON DELETE CASCADE;
 
--- Verify the data
-SELECT COUNT(*) AS total_matches FROM fact_matches;
+-- Verify the newly added data
+SELECT COUNT(*) AS new_matches 
+FROM fact_matches fm
+WHERE NOT EXISTS (
+    SELECT 1 
+    FROM fact_team_match_stats ftms 
+    WHERE ftms.match_id = fm.match_id
+);
