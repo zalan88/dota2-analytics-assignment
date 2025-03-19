@@ -6,6 +6,12 @@ import sys
 import os
 from pathlib import Path
 import time
+import psycopg2
+from datetime import datetime
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # Configure logging
 logging.basicConfig(
@@ -22,7 +28,7 @@ class ETL:
         self.db_name = os.getenv("POSTGRES_DB", "dota2_analytics")
         self.db_user = os.getenv("POSTGRES_USER", "postgres")
         self.db_password = os.getenv("POSTGRES_PASSWORD", "asd123")  # Default password
-        self.db_host = os.getenv("POSTGRES_HOST", "localhost")
+        self.db_host = os.getenv("POSTGRES_HOST", "db")  # Changed from "localhost" to "db"
         self.scripts_dir = Path("sql_scripts")
         
         # Set PGPASSWORD for all child processes

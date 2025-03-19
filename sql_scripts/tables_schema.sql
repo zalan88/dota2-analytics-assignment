@@ -1,5 +1,5 @@
 -- 1. First create staging tables (no dependencies)
-CREATE TABLE stg_matches (
+CREATE TABLE IF NOT EXISTS stg_matches (
     match_id BIGINT PRIMARY KEY,
     raw_json JSONB,           
     radiant_team_id INT,      
@@ -7,7 +7,7 @@ CREATE TABLE stg_matches (
     players_info JSONB        
 );
 
-CREATE TABLE stg_players (
+CREATE TABLE IF NOT EXISTS stg_players (
     raw_json JSONB,
     last_login TIMESTAMP,
     full_history_time TIMESTAMP,
@@ -16,16 +16,16 @@ CREATE TABLE stg_players (
     profileurl TEXT
 );
 
-CREATE TABLE stg_teams (
+CREATE TABLE IF NOT EXISTS stg_teams (
     raw_json JSONB
 );
 
-CREATE TABLE stg_heroes (
+CREATE TABLE IF NOT EXISTS stg_heroes (
     raw_json JSONB
 );
 
 -- 2. Then create dimension tables (no dependencies)
-CREATE TABLE dim_players (
+CREATE TABLE IF NOT EXISTS dim_players (
     account_id INT PRIMARY KEY,
     player_name TEXT,
     is_pro BOOLEAN,
@@ -36,13 +36,13 @@ CREATE TABLE dim_players (
     profileurl TEXT
 );
 
-CREATE TABLE dim_heroes (
+CREATE TABLE IF NOT EXISTS dim_heroes (
     hero_id INT PRIMARY KEY,
     hero_name TEXT,
     hero_main_role TEXT
 );
 
-CREATE TABLE dim_teams (
+CREATE TABLE IF NOT EXISTS dim_teams (
     team_id INT PRIMARY KEY,
     team_name TEXT,
     region TEXT,
@@ -57,7 +57,7 @@ CREATE TABLE dim_teams (
 );
 
 -- 3. Then create fact_matches (no dependencies)
-CREATE TABLE fact_matches (
+CREATE TABLE IF NOT EXISTS fact_matches (
     match_id BIGINT PRIMARY KEY,
     start_time BIGINT,
     duration INT,
@@ -72,7 +72,7 @@ CREATE TABLE fact_matches (
 );
 
 -- 4. Then create fact tables with foreign keys
-CREATE TABLE fact_team_match_stats (
+CREATE TABLE IF NOT EXISTS fact_team_match_stats (
     match_id BIGINT,
     team_id INT,
     total_kills INT,
@@ -89,7 +89,7 @@ CREATE TABLE fact_team_match_stats (
     FOREIGN KEY (team_id) REFERENCES dim_teams(team_id) ON DELETE CASCADE
 );
 
-CREATE TABLE fact_player_match_stats (
+CREATE TABLE IF NOT EXISTS fact_player_match_stats (
     match_id BIGINT,
     account_id INT,
     hero_id INT,
@@ -122,6 +122,6 @@ CREATE TABLE fact_player_match_stats (
 );
 
 -- 5. Finally create indexes
-CREATE INDEX idx_team_match_team_id ON fact_team_match_stats(team_id);
-CREATE INDEX idx_player_match_account_id ON fact_player_match_stats(account_id);
-CREATE INDEX idx_player_match_hero_id ON fact_player_match_stats(hero_id);
+CREATE INDEX IF NOT EXISTS idx_team_match_team_id ON fact_team_match_stats(team_id);
+CREATE INDEX IF NOT EXISTS idx_player_match_account_id ON fact_player_match_stats(account_id);
+CREATE INDEX IF NOT EXISTS idx_player_match_hero_id ON fact_player_match_stats(hero_id);

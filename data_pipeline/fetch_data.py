@@ -15,14 +15,45 @@ from psycopg2.extras import execute_values
 load_dotenv()
 DATABASE_URL = os.getenv("DATABASE_URL")  # PostgreSQL connection string
 API_BASE_URL = os.getenv("OPENDOTA_API_BASE_URL")  # OpenDota API base URL
-API_KEY = os.getenv("OPENDOTA_API_KEY")  # Optional API key for higher rate limits
+API_KEY = os.getenv("DOTA2_API_KEY")  # Optional API key for higher rate limits
 
 # Establish database connection
 conn = psycopg2.connect(DATABASE_URL)
 cursor = conn.cursor()
 
+def is_initial_load():
+    """
+    Determines if this is an initial load by checking if fact_matches table exists and is empty
+    Returns:
+        bool: True if this is an initial load (table doesn't exist or is empty), False otherwise
+    """
+    try:
+        # Check if fact_matches table exists and has any rows
+        cursor.execute("""
+            SELECT EXISTS (
+                SELECT FROM information_schema.tables 
+                WHERE table_name = 'fact_matches'
+            );
+        """)
+        table_exists = cursor.fetchone()[0]
+        
+        if not table_exists:
+            print("🔍 fact_matches table does not exist - treating as initial load")
+            return True
+            
+        cursor.execute("SELECT COUNT(*) FROM fact_matches LIMIT 1;")
+        count = cursor.fetchone()[0]
+        
+        is_empty = count == 0
+        print(f"🔍 fact_matches table {'is empty' if is_empty else 'has data'} - treating as {'initial' if is_empty else 'incremental'} load")
+        return is_empty
+        
+    except Exception as e:
+        print(f"⚠️ Error checking table state: {e} - defaulting to initial load")
+        return True
+
 # Configuration constants
-INITIAL_LOAD = os.getenv("INITIAL_LOAD", "false").lower() == "true"
+INITIAL_LOAD = is_initial_load()  # Auto-detect if this is initial load
 LOAD_OLDEST = os.getenv("LOAD_OLDEST", "false").lower() == "true"
 MATCH_LIMIT = int(os.getenv("MATCH_LIMIT", "50" if INITIAL_LOAD else "3"))  # Get from env or use default based on INITIAL_LOAD
 MATCH_HISTORY_DEPTH = 100  # How far back to look in match history

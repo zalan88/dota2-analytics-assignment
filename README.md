@@ -33,39 +33,100 @@ dota2-analytics-assignment/
 - Docker (20.10.0 or higher)
 - Docker Compose (2.0.0 or higher)
 - 4GB RAM minimum
-- Dota 2 API Key (get it from https://steamcommunity.com/dev)
+- Dota 2 API Key (get it [here](https://www.opendota.com/api-keys))
+- Port 5432 available (default PostgreSQL port)
 
 ## Quick Start
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/yourusername/dota2-analytics-assignment.git
+   git clone https://github.com/zalan88/dota2-analytics-assignment
    cd dota2-analytics-assignment
    ```
 
-2. Set up environment variables:
+2. Set up environment:
    ```bash
-   # Create .env file
+   # Copy the example environment file
    cp .env.example .env
    
-   # Edit .env file with your values
-   POSTGRES_DB=dota2_analytics
-   POSTGRES_USER=postgres
-   POSTGRES_PASSWORD=your_secure_password
-   DOTA2_API_KEY=your_api_key
+   # Edit .env file:
+   # - Add your Dota 2 API key (get it from https://www.opendota.com/api-keys)
+   # - Set a secure database password
    ```
 
-3. Start the services:
+3. Start the pipeline:
    ```bash
-   docker-compose up --build
+   docker-compose up
    ```
+   Wait for it to complete. The ETL container will exit when done.
 
-4. Run the pipeline:
+4. Query the data (in a new terminal):
    ```bash
-   python run_etl.py
+   docker-compose exec db psql -U postgres -d dota2_analytics
    ```
 
-## Loading Data From Scratch
+That's it! You can now analyze Dota 2 match data.
+
+Note: To rerun the ETL pipeline:
+```bash
+docker-compose up etl
+```
+
+## Common Database Commands
+
+Note: The pipeline automatically detects if this is the first run by checking the database state. On first run, it will perform a full initial load. Subsequent runs will be incremental updates. Users can force a full reload at any time by running `docker-compose down -v` to remove the volumes and start fresh.
+
+## Accessing the Database
+
+You can interact with the database in several ways:
+
+1. Using psql inside the container:
+   ```bash
+   docker-compose exec db psql -U postgres -d dota2_analytics
+   ```
+
+2. Common psql commands:
+   ```sql
+   -- List all tables
+   \dt
+
+   -- Describe a specific table
+   \d table_name
+
+   -- List schemas
+   \dn
+
+   -- Basic query example
+   SELECT COUNT(*) FROM fact_matches;
+   ```
+
+3. Running analytical queries:
+   ```bash
+   # View top players by KDA
+   docker-compose exec db psql -U postgres -d dota2_analytics -c "
+   SELECT 
+       p.player_name,
+       ROUND(AVG(pms.kda), 2) as avg_kda,
+       COUNT(*) as matches_played
+   FROM fact_player_match_stats pms
+   JOIN dim_players p ON p.account_id = pms.account_id
+   GROUP BY p.player_name
+   HAVING COUNT(*) > 5
+   ORDER BY avg_kda DESC
+   LIMIT 10;"
+   ```
+
+4. Using the provided analysis scripts:
+   ```bash
+   # Run a specific analysis
+   docker-compose exec db psql -U postgres -d dota2_analytics -f /app/analytical_questions_scripts/top3_player_kda.sql
+   ```
+
+## Configuration (Optional)
+
+In your `.env` file:
+- `MATCH_LIMIT`: Number of matches to process
+- `LOAD_OLDEST`: Set to true/false to load oldest/newest matches first (good to simulate incremental load)
 
 If you need to reset the database and load everything from scratch:
 
@@ -74,38 +135,12 @@ If you need to reset the database and load everything from scratch:
    docker-compose down -v   # -v flag removes volumes, ensuring complete cleanup
    ```
 
-2. Reset the database:
+2. Start fresh:
    ```bash
-   # Using Docker
-   docker-compose exec db psql -U postgres -c "DROP DATABASE IF EXISTS dota2_analytics;"
-   docker-compose exec db psql -U postgres -c "CREATE DATABASE dota2_analytics;"
-
-   # Or locally
-   psql -U postgres -c "DROP DATABASE IF EXISTS dota2_analytics;"
-   psql -U postgres -c "CREATE DATABASE dota2_analytics;"
+   docker-compose up   # This will start the database and run the ETL pipeline
    ```
 
-3. Initialize schema and load data:
-   ```bash
-   # Initialize database schema
-   docker-compose exec db psql -U postgres -d dota2_analytics -f /sql_scripts/tables_schema.sql
-
-   # Run the ETL pipeline
-   python run_etl.py --full-refresh
-   ```
-
-4. Verify the load:
-   ```bash
-   # Check table counts
-   docker-compose exec db psql -U postgres -d dota2_analytics -c "
-   SELECT 
-       'fact_matches' as table_name, COUNT(*) as count FROM fact_matches
-   UNION ALL
-   SELECT 'fact_player_match_stats', COUNT(*) FROM fact_player_match_stats
-   UNION ALL
-   SELECT 'fact_team_match_stats', COUNT(*) FROM fact_team_match_stats
-   ORDER BY table_name;"
-   ```
+## Prerequisites
 
 ## Running Analytics
 
@@ -113,7 +148,7 @@ Example queries are in the `analytical_questions_scripts/` directory:
 
 ```bash
 # Run analysis
-docker-compose exec db psql -U postgres -d dota2_analytics -f /scripts/top3_player_kda.sql
+docker-compose exec db psql -U postgres -d dota2_analytics -f /app/analytical_questions_scripts/top3_player_kda.sql
 ```
 
 ## Assessment Questions & Answers
@@ -154,6 +189,59 @@ Objectives: tower_kills + ancient_kills + roshan_kills.
 3. Data Limitations
 - Missing values (hero damage, actions per minute) default to 0.
 - Dependent on Dota 2 API availability and rate limits.
+
+## License
+
+MIT
+## Troubleshooting
+
+### Port 5432 Already in Use?
+
+1. Check what's using the port:
+   ```bash
+   # On Linux/Mac
+   sudo lsof -i :5432
+   # On Windows
+   netstat -ano | findstr :5432
+   ```
+
+2. Either:
+   - Stop your local PostgreSQL:
+     ```bash
+     # On Mac
+     brew services stop postgresql
+     # On Linux
+     sudo service postgresql stop
+     # On Windows
+     net stop postgresql
+     ```
+   
+   - Or change the port in `docker-compose.yml`:
+     ```yaml
+     services:
+       db:
+         ports:
+           - "5433:5432"  # Use 5433 instead
+     ```
+     Then update `DATABASE_URL` in `.env` to use the new port.
+
+### Container Issues?
+
+Try starting fresh:
+```bash
+docker-compose down -v
+docker-compose up
+```
+
+## Project Structure
+
+```
+dota2-analytics-assignment/
+├── analytical_questions_scripts/  # Example queries
+├── data_pipeline/                # Data fetching code
+├── sql_scripts/                  # Database setup
+└── run_etl.py                   # Main ETL script
+```
 
 ## License
 
