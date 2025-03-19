@@ -24,7 +24,7 @@ cursor = conn.cursor()
 # Configuration constants
 INITIAL_LOAD = os.getenv("INITIAL_LOAD", "false").lower() == "true"
 LOAD_OLDEST = os.getenv("LOAD_OLDEST", "false").lower() == "true"
-MATCH_LIMIT = 50 if INITIAL_LOAD else 3  # Process more matches on initial load
+MATCH_LIMIT = int(os.getenv("MATCH_LIMIT", "50" if INITIAL_LOAD else "3"))  # Get from env or use default based on INITIAL_LOAD
 MATCH_HISTORY_DEPTH = 100  # How far back to look in match history
 RETRY_ATTEMPTS = 3  # Number of retry attempts for failed API calls
 BACKOFF_FACTOR = 2  # Exponential backoff multiplier between retries

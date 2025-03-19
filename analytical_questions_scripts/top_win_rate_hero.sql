@@ -3,16 +3,17 @@
 **/
 
 SELECT 
-    hero_name, 
-    ROUND(CAST(COUNT(CASE WHEN win_flag = true THEN 1 END) AS DECIMAL) / COUNT(*) * 100, 2) as win_rate 
+    h.hero_name, 
+    ROUND(CAST(COUNT(CASE WHEN pm.win_flag = true THEN 1 END) AS DECIMAL) / COUNT(*) * 100, 2) as win_rate,
+    COUNT(*) as total_matches_played
 FROM 
-    dim_heroes h 
-    JOIN fact_player_match_stats pm 
-        ON h.hero_id = pm.hero_id 
-    JOIN fact_matches m 
-        ON pm.match_id = m.match_id 
+    fact_player_match_stats pm
+    JOIN dim_heroes h ON h.hero_id = pm.hero_id 
 WHERE 
-    h.team_id = 2163 --Comment this line to run for all teams
-    --m.start_time >= extract(epoch from (CURRENT_TIMESTAMP - INTERVAL '1 week')) 
-GROUP BY 1 
-ORDER BY 2 DESC;
+    pm.team_id = 2163 --Comment this line to run for all teams
+GROUP BY 
+    h.hero_name 
+HAVING 
+    COUNT(*) >= 5 -- Only consider heroes played at least 5 times
+ORDER BY 
+    win_rate DESC;

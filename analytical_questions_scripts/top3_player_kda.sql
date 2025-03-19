@@ -1,19 +1,17 @@
 /**
-3. Who are the top 3 players by KDA in the team’s matches?
+3. Who are the top 3 players by KDA in the team's matches?
 **/
 
 SELECT 
-    player_name, 
-    AVG(kda) as avg_kda 
+    p.player_name, 
+    CAST(AVG(pm.kda) AS NUMERIC(10,2)) as avg_kda 
 FROM 
     dim_players p 
-    JOIN fact_player_match_stats pm 
-        ON p.account_id = pm.account_id 
-    JOIN fact_matches m 
-        ON pm.match_id = m.match_id 
+    JOIN fact_player_match_stats pm ON p.account_id = pm.account_id 
 WHERE 
-    p.team_id = 2163 AND --Comment this line to run for all teams
-    m.start_time >= extract(epoch from (CURRENT_TIMESTAMP - INTERVAL '1 week')) 
-GROUP BY 1 
-ORDER BY 2 DESC 
+    pm.team_id = 2163  -- Comment this line to run for all teams
+GROUP BY 
+    p.player_name 
+ORDER BY 
+    avg_kda DESC 
 LIMIT 3;

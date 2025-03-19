@@ -8,7 +8,12 @@ CREATE TABLE stg_matches (
 );
 
 CREATE TABLE stg_players (
-    raw_json JSONB
+    raw_json JSONB,
+    last_login TIMESTAMP,
+    full_history_time TIMESTAMP,
+    country_code VARCHAR(2),
+    last_match_time TIMESTAMP,
+    profileurl TEXT
 );
 
 CREATE TABLE stg_teams (
@@ -23,7 +28,12 @@ CREATE TABLE stg_heroes (
 CREATE TABLE dim_players (
     account_id INT PRIMARY KEY,
     player_name TEXT,
-    is_pro BOOLEAN
+    is_pro BOOLEAN,
+    last_login TIMESTAMP,
+    full_history_time TIMESTAMP,
+    country_code VARCHAR(2),
+    last_match_time TIMESTAMP,
+    profileurl TEXT
 );
 
 CREATE TABLE dim_heroes (
@@ -83,6 +93,9 @@ CREATE TABLE fact_player_match_stats (
     match_id BIGINT,
     account_id INT,
     hero_id INT,
+    start_time BIGINT,
+    team_id INT,
+    win_flag BOOLEAN,
     kda FLOAT,
     kills INT,
     deaths INT,
@@ -93,6 +106,7 @@ CREATE TABLE fact_player_match_stats (
     tower_kills INT,
     ancient_kills INT,
     hero_kills INT,
+    hero_damage INT,
     actions_per_minute INT,
     item_0 INT,
     item_1 INT,
@@ -103,7 +117,8 @@ CREATE TABLE fact_player_match_stats (
     PRIMARY KEY (match_id, account_id),
     FOREIGN KEY (match_id) REFERENCES fact_matches(match_id) ON DELETE CASCADE,
     FOREIGN KEY (account_id) REFERENCES dim_players(account_id) ON DELETE CASCADE,
-    FOREIGN KEY (hero_id) REFERENCES dim_heroes(hero_id) ON DELETE SET NULL
+    FOREIGN KEY (hero_id) REFERENCES dim_heroes(hero_id) ON DELETE SET NULL,
+    FOREIGN KEY (team_id) REFERENCES dim_teams(team_id) ON DELETE SET NULL
 );
 
 -- 5. Finally create indexes
