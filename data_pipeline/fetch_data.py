@@ -23,6 +23,7 @@ cursor = conn.cursor()
 
 # Configuration constants
 INITIAL_LOAD = os.getenv("INITIAL_LOAD", "false").lower() == "true"
+LOAD_OLDEST = os.getenv("LOAD_OLDEST", "false").lower() == "true"
 MATCH_LIMIT = 50 if INITIAL_LOAD else 3  # Process more matches on initial load
 MATCH_HISTORY_DEPTH = 100  # How far back to look in match history
 RETRY_ATTEMPTS = 3  # Number of retry attempts for failed API calls
@@ -143,6 +144,9 @@ def get_team_matches(team_id):
     matches = matches[:MATCH_HISTORY_DEPTH]  # Look deeper into history
     print(f"🛠 API returned {len(matches)} matches (Looking at last {MATCH_HISTORY_DEPTH} matches)")
     
+    # Sort matches by timestamp
+    matches.sort(key=lambda x: x['start_time'], reverse=not LOAD_OLDEST)
+    
     # Debug: Print first few matches timestamps
     for match in matches[:5]:
         print(f"Debug: Match {match['match_id']} timestamp: {match['start_time']} "
@@ -210,6 +214,7 @@ if __name__ == "__main__":
     team_id = 2163  # Team ID to analyze
     
     print(f"Running in {'INITIAL LOAD' if INITIAL_LOAD else 'INCREMENTAL'} mode")
+    print(f"Loading {'OLDEST' if LOAD_OLDEST else 'NEWEST'} matches first")
     print(f"Will process up to {MATCH_LIMIT} new matches per run")
     
     # Get existing data to avoid duplicates
@@ -231,14 +236,28 @@ if __name__ == "__main__":
     for m in matches:
         match_id = int(m["match_id"])
         match_time = int(m["start_time"])
-        is_new = match_id not in existing_match_ids and match_time > latest_match_time
+        
+        if LOAD_OLDEST:
+            # When loading oldest first, we want matches that are:
+            # 1. Not already in our database
+            # 2. Newer than our latest_match_time (which is 0 initially)
+            is_new = match_id not in existing_match_ids and match_time > latest_match_time
+        else:
+            # When loading newest first (default), we want matches that are:
+            # 1. Not already in our database
+            # 2. Newer than our latest_match_time
+            is_new = match_id not in existing_match_ids and match_time > latest_match_time
         
         if is_new:
             new_matches.append(m)
         else:
-            print(f"Skipping match {match_id}: "
-                  f"{'Already exists' if match_id in existing_match_ids else 'Too old'} "
+            reason = "Already exists" if match_id in existing_match_ids else "Too old"
+            print(f"Skipping match {match_id}: {reason} "
                   f"(timestamp: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(match_time))})")
+    
+    # When loading oldest first, sort by timestamp ascending
+    if LOAD_OLDEST:
+        new_matches.sort(key=lambda x: x['start_time'])
     
     # Apply the processing limit to new matches
     new_matches = new_matches[:MATCH_LIMIT]
