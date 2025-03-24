@@ -27,7 +27,7 @@ class ETL:
     def __init__(self):
         self.db_name = os.getenv("POSTGRES_DB", "dota2_analytics")
         self.db_user = os.getenv("POSTGRES_USER", "postgres")
-        self.db_password = os.getenv("POSTGRES_PASSWORD", "asd123")  # Default password
+        self.db_password = os.getenv("POSTGRES_PASSWORD")
         self.db_host = os.getenv("POSTGRES_HOST", "db")  # Changed from "localhost" to "db"
         self.scripts_dir = Path("sql_scripts")
         
