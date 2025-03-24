@@ -14,5 +14,5 @@ FROM
         ON tm.match_id = m.match_id 
 WHERE 
     t.team_id = 2163 AND --Comment this line to run for all teams
-    m.start_time >= extract(epoch from (CURRENT_TIMESTAMP - INTERVAL '1 week')) 
+    m.start_time >= extract(epoch from (CURRENT_TIMESTAMP - INTERVAL '10 week')) 
 GROUP BY 1;
